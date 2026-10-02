@@ -11,3 +11,10 @@ pythonpath = ["."]
 markers = [
     "perf: performance tests",
 ]
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+extraPaths = ["."]
+
+
