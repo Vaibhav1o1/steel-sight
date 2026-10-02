@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+# pyrefly: ignore [missing-import]
 from billetvision import config
 from billetvision.enums import (
     AlertLevel,

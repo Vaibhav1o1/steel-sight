@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 from billetvision.vision.types import IdResult
 
@@ -223,4 +227,51 @@ def resolve_id(
         ocr_agreement=ocr_agreement,
         qr_text=clean_qr,
         id_mismatch=id_mismatch,
+    )
+
+
+def read_id(
+    crops: list[NDArray[np.uint8]],
+    ocr_fn: Callable[[NDArray[np.uint8]], list[tuple[str, float]]],
+    qr_fn: Callable[[list[NDArray[np.uint8]]], str | None],
+    template: str,
+) -> IdResult:
+    """Pure end-to-end ID reading per SPEC §12.3 and §12.5.
+
+    1. Run OCR on each crop and collect (text, score) lines.
+    2. Vote for the best valid candidate; if none, retry on 180°-rotated crops.
+    3. Read QR from all crops.
+    4. Resolve billet_id, id_source, id_mismatch.
+
+    Args:
+        crops: Upright BGR billet crop images.
+        ocr_fn: Function that takes a single BGR crop and returns (text, score) list.
+        qr_fn: Function that takes a list of BGR crops and returns the decoded QR string or None.
+        template: ID template string (e.g. 'A99-9999').
+
+    Returns:
+        IdResult with all fields populated.
+    """
+    import cv2  # local import to keep module pure at top-level without cv2 dependency
+
+    # Collect OCR results for each crop
+    crop_lines: list[list[tuple[str, float]]] = [ocr_fn(c) for c in crops]
+
+    # Vote — first pass
+    winner, confidence, agreement, raw_text = vote(crop_lines, template)
+
+    # Retry on 180°-rotated crops if no valid winner (SPEC §12.3)
+    if winner is None and crops:
+        rotated_lines: list[list[tuple[str, float]]] = [ocr_fn(cv2.rotate(c, cv2.ROTATE_180)) for c in crops]
+        winner, confidence, agreement, raw_text = vote(rotated_lines, template)
+
+    # QR decode
+    qr_text = qr_fn(crops)
+
+    return resolve_id(
+        ocr_winner=winner,
+        ocr_confidence=confidence,
+        ocr_agreement=agreement,
+        ocr_raw=raw_text,
+        qr_text=qr_text,
     )
