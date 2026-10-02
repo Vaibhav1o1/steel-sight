@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+import sys
 import time
+from pathlib import Path
 
 import cv2
 import numpy as np
 from rapidocr import RapidOCR
+
+# Ensure backend is in sys.path when executed directly
+_backend_dir = str(Path(__file__).resolve().parent.parent)
+if _backend_dir not in sys.path:
+    sys.path.insert(0, _backend_dir)
 
 
 def run_smoke_test() -> tuple[str, float, float]:

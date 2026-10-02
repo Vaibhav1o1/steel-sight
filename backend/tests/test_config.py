@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from billetvision import config
 from billetvision.enums import (
     AlertLevel,
@@ -94,7 +96,7 @@ def test_config_runtime_defaults() -> None:
     assert config.TTS_ENABLED is False
 
 
-def test_config_env_overrides(monkeypatch) -> None:
+def test_config_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SEED", "99")
     monkeypatch.setenv("TTS_ENABLED", "true")
     monkeypatch.setenv(
