@@ -1,1 +1,3 @@
 prop_id,length_mm,width_mm,thickness_mm,notes
+H24-1187,400.0,100.0,100.0,Nominal pass prop
+H24-1188,400.0,100.0,100.0,Notched prop
