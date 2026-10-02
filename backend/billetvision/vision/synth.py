@@ -188,7 +188,13 @@ def _draw_billet_local(
     return np.asarray(bgr, dtype=np.uint8), mask, cx_px, cy_px
 
 
-def _apply_effects(img: NDArray[np.uint8], effects: Effects, rng: np.random.Generator) -> NDArray[np.uint8]:
+def _apply_effects(
+    img: NDArray[np.uint8],
+    effects: Effects,
+    rng: np.random.Generator,
+    billets: tuple[BilletSpec, ...] = (),
+    h_bed_to_img: NDArray[np.float64] | None = None,
+) -> NDArray[np.uint8]:
     out = img.astype(np.float32)
 
     if effects.brightness != 1.0:
@@ -210,11 +216,36 @@ def _apply_effects(img: NDArray[np.uint8], effects: Effects, rng: np.random.Gene
             cv2.circle(out_u8, (int(x), int(y)), int(rng.integers(1, 3)), int(c), -1)
 
     if effects.glare:
-        h, w = out_u8.shape[:2]
-        gx, gy = int(rng.integers(w // 4, 3 * w // 4)), int(rng.integers(h // 3, 2 * h // 3))
-        overlay = out_u8.copy()
-        cv2.ellipse(overlay, (gx, gy), (180, 70), int(rng.integers(-20, 20)), 0, 360, (255, 255, 255), -1)
-        out_u8 = cv2.addWeighted(overlay, 0.75, out_u8, 0.25, 0.0)
+        if len(billets) > 0 and h_bed_to_img is not None:
+            # SPEC §5.1: saturated ellipse on one billet
+            b = billets[0]
+            pts = np.array([[[b.center_mm[0], b.center_mm[1]]]], dtype=np.float64)
+            proj = cv2.perspectiveTransform(pts, h_bed_to_img)[0, 0]
+            gx, gy = int(round(proj[0])), int(round(proj[1]))
+            scale = 1920.0 / 650.0
+            ax_l = int(round(min(b.length_mm * scale * 0.25, 120.0)))
+            ax_w = int(round(min(b.width_mm * scale * 0.35, 45.0)))
+            overlay = out_u8.copy()
+            cv2.ellipse(
+                overlay,
+                (gx, gy),
+                (ax_l, ax_w),
+                int(round(b.angle_deg)),
+                0,
+                360,
+                (255, 255, 255),
+                -1,
+            )
+            out_u8 = cv2.addWeighted(overlay, 0.75, out_u8, 0.25, 0.0)
+        elif len(billets) == 0:
+            # When there are no billets (e.g. background capture), no specular glare on billets exists
+            pass
+        else:
+            h, w = out_u8.shape[:2]
+            gx, gy = int(rng.integers(w // 4, 3 * w // 4)), int(rng.integers(h // 3, 2 * h // 3))
+            overlay = out_u8.copy()
+            cv2.ellipse(overlay, (gx, gy), (180, 70), int(rng.integers(-20, 20)), 0, 360, (255, 255, 255), -1)
+            out_u8 = cv2.addWeighted(overlay, 0.75, out_u8, 0.25, 0.0)
 
     if effects.noise_sigma > 0.0:
         noise = rng.normal(0, effects.noise_sigma, out_u8.shape).astype(np.float32)
@@ -305,7 +336,13 @@ def render_scene(spec: SceneSpec, rng: np.random.Generator) -> tuple[NDArray[np.
         dtype=np.uint8,
     )
 
-    final_img = _apply_effects(warped_img, spec.effects, rng)
+    final_img = _apply_effects(
+        warped_img,
+        spec.effects,
+        rng,
+        billets=spec.billets,
+        h_bed_to_img=h_bed_to_img,
+    )
 
     offset_mm = 0.5 / float(SYN_PX_PER_MM)
     corners_bed = np.array(
