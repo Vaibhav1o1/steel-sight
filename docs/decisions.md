@@ -12,3 +12,21 @@
 | 2026-10-03 | Adj A | Standardized canonical field name to `width_variation_pct` across all contracts, DB DDL, API, and UI, while retaining `cs_var_pct` as an accepted input alias | Guarantees strict contract conformance and backward compatibility across existing tests and schema definitions |
 | 2026-10-03 | Adj B | Added joint multi-marker ($N \ge 4$) calibration with RMS residual and per-marker residuals, enforced measured marker side requirement, and restricted saving to residual $\le 1.5$ mm; single-marker mode flagged as `reduced-baseline` with warning | Extends calibration over full inspection baseline and guarantees physical caliper verification before saving |
 | 2026-10-03 | Adj C | Added `Review` status to `InspectionStatus` and wired `calib_drift` to force `Review` status with reason and flag `CALIB_DRIFT` | Implements fail-safe directive: measurements taken during active calibration drift are never marked PASS |
+
+## T19 - Camera Source
+- Human check confirmed webcam capture at 1920x1080 @ 30.0 FPS (driver locks: auto_exposure=False, autofocus=False, auto_wb=False).
+
+
+## T20 — Processing Pipeline (Resolved)
+
+- **drift_mm signature**: Real API is `drift_mm(corners_current, corners_calib, image_px_per_mm)`, not `drift_mm(cal, corners)`. Adapted pipeline to unpack and pass all three args.
+- **calibrate_from_marker**: Takes explicit kwargs (`marker_mm`, `rect_px_per_mm`, etc.), not a `cfg` object. Pipeline passes config constants directly.
+- **build_rectifier import**: Lives in `vision.rectify`, not `vision.calibration`. Fixed import.
+- **Tracker kwarg**: Uses `trigger_mode=`, not `mode=`.
+- **detect_marker return**: Returns `(corners, refine_shift)` tuple; pipeline unpacks as `corners, _shift`.
+- **PipelineSnapshot**: Added frozen dataclass to `state.py` for consistent per-frame reads under lock.
+- **StatusSnapshot**: Added for stats publishing with real `camera_ok`, `calibrated`, `paused`, `log_status`.
+- **RuntimeMetrics**: Added thread-safe `inc_dropped_jobs()`, `inc_errors()`, `dropped_jobs`, `errors`.
+- **Worker system_alerts**: Added `system_alerts` queue drain to OcrWorkerThread; pipeline never touches DB.
+- **Alert rate-limiting**: `_AlertGate` with 30s cooldown per key prevents alert spam.
+- **glare_mask**: Returns `uint8` (0/255), not `bool_` — compatible with `measure()`'s optional glare param.
