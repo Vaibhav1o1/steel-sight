@@ -244,6 +244,16 @@ def test_vision_types_dataclasses() -> None:
     )
     assert defects.defects == ("notch",)
 
+    det = Detection(
+        contour_px=np.zeros((4, 2), dtype=np.float32),
+        center_mm=(100.0, 50.0),
+        angle_deg=0.0,
+        rough_length_mm=100.0,
+        rough_width_mm=40.0,
+        area_mm2=4000.0,
+        full_inside=True,
+        merged=False,
+    )
     track = Track(
         id=1,
         center_mm=(100.0, 50.0),
@@ -254,6 +264,7 @@ def test_vision_types_dataclasses() -> None:
         first_sample_t=1.0,
         crossed_line=False,
         finalized=False,
+        latest_detection=det,
     )
     assert track.id == 1
 

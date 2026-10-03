@@ -16,6 +16,8 @@ export interface TopBarProps {
 
 const NAV_ITEMS = [
   { href: "/", label: "Live" },
+  { href: "/upload", label: "Upload" },
+  { href: "/analytics", label: "Analytics" },
   { href: "/log", label: "Log" },
   { href: "/calibration", label: "Calibration" },
   { href: "/accuracy", label: "Accuracy" },

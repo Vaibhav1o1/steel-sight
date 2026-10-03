@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncGenerator
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
 
 from billetvision import config
@@ -44,3 +44,21 @@ async def get_stream(state: StateDep, view: str = Query("annotated")) -> Streami
         mjpeg_generator(state, view),
         media_type="multipart/x-mixed-replace; boundary=frame"
     )
+
+
+@router.get("/snapshot.jpg")
+def get_snapshot(state: StateDep, view: str = Query("annotated")) -> Response:
+    """Return latest snapshot frame as JPEG."""
+    state.request_view(view)
+    frame_bytes = state.get_jpeg(view)
+    if not frame_bytes:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "CAMERA_UNAVAILABLE",
+                "message": "Camera frame not available",
+                "hint": "Ensure camera is connected and streaming",
+            },
+        )
+    return Response(content=frame_bytes, media_type="image/jpeg")
+

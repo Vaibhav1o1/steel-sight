@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from billetvision.api.routes import (
     alerts,
+    analytics,
     calibration,
     control,
     export,
@@ -13,6 +14,7 @@ from billetvision.api.routes import (
     specs,
     status,
     stream,
+    upload,
     ws,
 )
 
@@ -38,6 +40,8 @@ def create_app(lifespan=None) -> FastAPI:
     app.include_router(ws.router)
     app.include_router(alerts.router)
     app.include_router(metrics.router)
+    app.include_router(upload.router)
+    app.include_router(analytics.router)
 
     # Health check
     @app.get("/health", tags=["Health"])

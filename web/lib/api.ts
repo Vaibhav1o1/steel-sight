@@ -21,8 +21,8 @@ import type {
   VerifyResult,
 } from "./types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const WS_BASE = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000/ws";
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+export const WS_BASE = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000/ws";
 
 export class ApiError extends Error {
   readonly code: string;
@@ -94,14 +94,14 @@ export function exportUrl(
   filters?: { status?: InspectionStatus; since?: string },
 ): string {
   const params = new URLSearchParams();
-  params.set("format", format);
   if (filters?.status) {
     params.set("status", filters.status);
   }
   if (filters?.since) {
     params.set("since", filters.since);
   }
-  return `${API_BASE}/export?${params.toString()}`;
+  const query = params.toString();
+  return `${API_BASE}/export/${format}${query ? `?${query}` : ""}`;
 }
 
 export function inspectionSnapshotUrl(id: number): string {
@@ -300,3 +300,63 @@ export function getMetrics(): Promise<Metrics> {
 export function getEval(): Promise<EvalResponse> {
   return requestJson<EvalResponse>("/eval");
 }
+
+// ── Upload Inspection ──────────────────────────────
+export async function uploadImage(
+  file: File,
+  stationCamera: boolean = false,
+): Promise<import("./upload_types").UploadResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const url = `${API_BASE}/inspect/image${stationCamera ? "?station_camera=true" : ""}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      body: formData,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Network error";
+    throw new ApiError("CAMERA_UNAVAILABLE", msg, 503, null);
+  }
+
+  if (!res.ok) {
+    const data: unknown = await res.json().catch(() => null);
+    if (isRecord(data)) {
+      const detail = data["detail"];
+      if (isRecord(detail)) {
+        const code = typeof detail["code"] === "string" ? detail["code"] : "INTERNAL";
+        const message =
+          typeof detail["message"] === "string" ? detail["message"] : res.statusText;
+        const hint = typeof detail["hint"] === "string" ? detail["hint"] : null;
+        throw new ApiError(code, message, res.status, hint);
+      }
+    }
+    throw new ApiError("BAD_REQUEST", "Failed to upload image", res.status, null);
+  }
+
+  return res.json();
+}
+
+export function uploadedImageUrl(imageId: string): string {
+  return `${API_BASE}/inspect/image/${imageId}.jpg`;
+}
+
+// ── Analytics ──────────────────────────────────────
+export function getStatusSeries(
+  params?: import("./analytics_types").StatusSeriesParams,
+): Promise<import("./analytics_types").StatusSeriesResponse> {
+  const q = new URLSearchParams();
+  if (params?.mode) q.set("mode", params.mode);
+  if (params?.basis) q.set("basis", params.basis);
+  if (params?.source) q.set("source", params.source);
+  if (typeof params?.bucket_size === "number") q.set("bucket_size", params.bucket_size.toString());
+  if (params?.interval) q.set("interval", params.interval);
+  if (params?.since) q.set("since", params.since);
+  const query = q.toString();
+  return requestJson<import("./analytics_types").StatusSeriesResponse>(
+    query ? `/analytics/status-series?${query}` : "/analytics/status-series",
+  );
+}
+

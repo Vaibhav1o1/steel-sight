@@ -96,3 +96,21 @@ def test_websocket(client, app_and_state):
         bus.publish({"type": "test_event"})
         data = websocket.receive_json()
         assert "type" in data
+
+
+def test_snapshot_503_when_no_frame(client):
+    res = client.get("/snapshot.jpg")
+    assert res.status_code == 503
+    data = res.json()
+    assert data["detail"]["code"] == "CAMERA_UNAVAILABLE"
+
+
+def test_snapshot_200_when_frame_exists(client, app_and_state):
+    _, state, _ = app_and_state
+    fake_jpeg = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xdb"
+    state.publish_jpeg("annotated", fake_jpeg)
+    res = client.get("/snapshot.jpg")
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "image/jpeg"
+    assert res.content == fake_jpeg
+

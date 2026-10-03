@@ -34,11 +34,20 @@ export const STATUS_STYLES: Record<InspectionStatus, StatusStyle> = {
     borderClass: "border-red-600",
     hex: "#dc2626",
   },
+  Review: {
+    label: "Review",
+    badgeClass: "bg-blue-600/15 text-blue-700 dark:text-blue-400 border-blue-600/30",
+    textClass: "text-blue-600 dark:text-blue-400",
+    bgClass: "bg-blue-600",
+    borderClass: "border-blue-600",
+    hex: "#2563eb",
+  },
 };
 
 export const ALERT_STYLES: Record<AlertLevel, StatusStyle> = {
   Fail: STATUS_STYLES.Fail,
   Rework: STATUS_STYLES.Rework,
+  Review: STATUS_STYLES.Review,
   System: {
     label: "System",
     badgeClass: "bg-slate-500/15 text-slate-700 dark:text-slate-300 border-slate-500/30",
@@ -46,6 +55,14 @@ export const ALERT_STYLES: Record<AlertLevel, StatusStyle> = {
     bgClass: "bg-slate-500",
     borderClass: "border-slate-500",
     hex: "#64748b",
+  },
+  CALIB_DRIFT: {
+    label: "Calib Drift",
+    badgeClass: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
+    textClass: "text-amber-500 dark:text-amber-400",
+    bgClass: "bg-amber-500",
+    borderClass: "border-amber-500",
+    hex: "#f59e0b",
   },
 };
 

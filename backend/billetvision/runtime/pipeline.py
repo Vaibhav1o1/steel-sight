@@ -259,7 +259,7 @@ class ProcessingThread(threading.Thread):
         )
         annotated = draw_tracks(
             annotated,
-            tracker.tracks,
+            list(tracker.tracks.values()),
             roi=snap.rectifier.roi,
             px_per_mm=snap.rectifier.cal.rect_px_per_mm,
         )
