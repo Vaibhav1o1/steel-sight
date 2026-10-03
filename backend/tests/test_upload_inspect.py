@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import queue
 from pathlib import Path
+from unittest.mock import patch
 
 import cv2
 import numpy as np
@@ -19,6 +20,7 @@ from billetvision.runtime.events import EventBus
 from billetvision.runtime.sources import SyntheticSource
 from billetvision.runtime.state import RuntimeState
 from billetvision.schemas import CalibrationState, Roi, Spec
+from billetvision.vision import rectify
 from billetvision.vision.synth import (
     BilletSpec,
     CameraSpec,
@@ -63,7 +65,7 @@ def client(test_app_and_state):
     return TestClient(app)
 
 
-def _make_synth_billet_image(with_marker: bool = True) -> bytes:
+def _make_synth_billet_image(with_marker: bool = True, defect: str | None = None, qr: bool = False) -> bytes:
     """Generate a clean synthetic billet image with or without marker."""
     rng = np.random.default_rng(42)
     billet = BilletSpec(
@@ -72,9 +74,9 @@ def _make_synth_billet_image(with_marker: bool = True) -> bytes:
         length_mm=500.0,
         width_mm=100.0,
         id_text="A12-3456",
-        qr=False,
-        defect=None,
-        defect_size_mm=0.0,
+        qr=qr,
+        defect=defect,  # type: ignore
+        defect_size_mm=6.5 if defect else 0.0,
     )
     scene = SceneSpec(
         billets=(billet,),
@@ -100,7 +102,7 @@ def test_upload_marker_present_calibrated(client, test_app_and_state):
     _, _, engine = test_app_and_state
     _, count_before = get_inspections(engine)
 
-    img_bytes = _make_synth_billet_image(with_marker=True)
+    img_bytes = _make_synth_billet_image(with_marker=True, qr=False)
     res = client.post(
         "/inspect/image",
         files={"file": ("billet.jpg", img_bytes, "image/jpeg")},
@@ -113,12 +115,40 @@ def test_upload_marker_present_calibrated(client, test_app_and_state):
     assert "accuracy assumes the marker lies" in data["calibration"]["warning"]
     assert data["length_mm"] is not None
     assert data["width_mm"] is not None
+    assert data["nominal_length_mm"] == 500.0
+    assert data["nominal_width_mm"] == 100.0
+    assert data["tol_length_mm"] == 5.0
+    assert data["tol_width_mm"] == 2.0
+    assert data["length_dev_mm"] is not None
+    assert data["width_dev_mm"] is not None
+    assert data["length_passed"] is not None
+    assert data["width_passed"] is not None
     assert data["status"] in ("Pass", "Rework", "Fail", "Review")
     assert data["annotated_url"].startswith("/inspect/image/")
 
     # Verify no row added to SQLite inspections DB
     _, count_after = get_inspections(engine)
     assert count_after == count_before
+
+
+def test_upload_marker_invokes_rectification_pipeline(client, test_app_and_state):
+    """Verify that marker calibration genuinely invokes build_rectifier and returns mm dimensions."""
+    img_bytes = _make_synth_billet_image(with_marker=True)
+
+    with patch(
+        "billetvision.vision.upload_inspect.build_rectifier",
+        wraps=rectify.build_rectifier,
+    ) as mock_rect:
+        res = client.post(
+            "/inspect/image",
+            files={"file": ("billet.jpg", img_bytes, "image/jpeg")},
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert mock_rect.called
+        assert data["calibrated"] is True
+        assert data["length_mm"] > 0
+        assert data["width_mm"] > 0
 
 
 def test_upload_no_marker_uncalibrated(client, test_app_and_state):
@@ -146,9 +176,7 @@ def test_upload_no_marker_uncalibrated(client, test_app_and_state):
     assert count_after == count_before
 
 
-def test_upload_station_camera_with_and_without_calibration(
-    client, test_app_and_state
-):
+def test_upload_station_camera_with_and_without_calibration(client, test_app_and_state):
     _, state, _ = test_app_and_state
     img_bytes = _make_plain_billet_image()
 
@@ -192,6 +220,43 @@ def test_upload_station_camera_with_and_without_calibration(
     assert d2["length_mm"] is not None
 
 
+def test_upload_test_dataset_listing(client):
+    res = client.get("/inspect/test-dataset")
+    assert res.status_code == 200
+    items = res.json()
+    assert isinstance(items, list)
+    if len(items) > 0:
+        assert "filename" in items[0]
+        assert "variant" in items[0]
+        assert "expected_status" in items[0]
+
+
+def test_upload_test_dataset_inspect(client, test_app_and_state):
+    _, _, engine = test_app_and_state
+    _, count_before = get_inspections(engine)
+
+    # List dataset to get a valid image
+    list_res = client.get("/inspect/test-dataset")
+    assert list_res.status_code == 200
+    items = list_res.json()
+
+    if len(items) > 0:
+        test_img_name = items[0]["filename"]
+        res = client.post(f"/inspect/test-dataset/{test_img_name}")
+        assert res.status_code == 200
+        data = res.json()
+
+        assert "system_result" in data
+        assert "ground_truth" in data
+        assert "comparison" in data
+        assert data["is_test_dataset"] is True
+        assert data["system_result"]["calibrated"] is True
+
+        # Verify no inspection record is written to production DB
+        _, count_after = get_inspections(engine)
+        assert count_after == count_before
+
+
 def test_upload_wrong_magic_bytes_415(client):
     res = client.post(
         "/inspect/image",
@@ -202,7 +267,6 @@ def test_upload_wrong_magic_bytes_415(client):
 
 
 def test_upload_corrupt_bytes_422(client):
-    # Valid JPEG header followed by junk
     corrupt = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100
     res = client.post(
         "/inspect/image",
@@ -213,7 +277,6 @@ def test_upload_corrupt_bytes_422(client):
 
 
 def test_upload_oversize_413(client):
-    # Over 15 MB
     large_data = b"\xff\xd8\xff" + b"0" * (15 * 1024 * 1024 + 10)
     res = client.post(
         "/inspect/image",
@@ -224,7 +287,6 @@ def test_upload_oversize_413(client):
 
 
 def test_upload_huge_pixel_image_413(client):
-    # Image with dimensions exceeding 50 MP (e.g. 8000 x 7000 = 56 MP)
     pil_img = Image.new("RGB", (8000, 7000), color=(100, 100, 100))
     buf = io.BytesIO()
     pil_img.save(buf, format="JPEG")
@@ -258,23 +320,20 @@ def test_get_annotated_image_endpoint(client):
     assert invalid_res.status_code == 404
 
     # 3. Non-existent UUID
-    missing_res = client.get(
-        "/inspect/image/00000000-0000-0000-0000-000000000000.jpg"
-    )
+    missing_res = client.get("/inspect/image/00000000-0000-0000-0000-000000000000.jpg")
     assert missing_res.status_code == 404
 
 
 @pytest.mark.anyio
 async def test_upload_concurrency_limit(test_app_and_state):
     import asyncio
+
     from httpx import ASGITransport, AsyncClient
 
     app, _, _ = test_app_and_state
     img_bytes = _make_synth_billet_image(with_marker=True)
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         reqs = [
             ac.post(
                 "/inspect/image",
@@ -289,3 +348,58 @@ async def test_upload_concurrency_limit(test_app_and_state):
         assert res.json()["calibrated"] is True
 
 
+def test_upload_notch_defect_size_magnitude(client):
+    """Verify that a notch defect reports notch depth rather than residual billet width."""
+    img_bytes = _make_synth_billet_image(with_marker=True, defect="notch")
+    res = client.post(
+        "/inspect/image",
+        files={"file": ("billet.jpg", img_bytes, "image/jpeg")},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["defect_type"] == "notch"
+    # Defect size must represent the notch depth (~6.5 mm), NOT the residual billet width (~93.5 mm)
+    assert data["defect_size_mm"] is not None
+    assert 4.0 <= data["defect_size_mm"] <= 10.0
+
+
+def test_upload_multi_billet_no_cross_id_assignment(client):
+    """Ensure that if the inspected billet has no readable ID, it does NOT steal another billet's ID."""
+    rng = np.random.default_rng(123)
+    b_upper = BilletSpec(
+        center_mm=(340.0, -75.0),
+        angle_deg=0.0,
+        length_mm=500.0,
+        width_mm=100.0,
+        id_text="K24-7059",
+        qr=False,
+        defect=None,
+        defect_size_mm=0.0,
+    )
+    b_lower = BilletSpec(
+        center_mm=(340.0, 75.0),
+        angle_deg=0.0,
+        length_mm=502.0,
+        width_mm=100.0,
+        id_text="",
+        qr=False,
+        defect=None,
+        defect_size_mm=0.0,
+    )
+    scene = SceneSpec(
+        billets=(b_upper, b_lower),
+        camera=CameraSpec(),
+        effects=Effects(),
+        with_marker=True,
+    )
+    img, _ = render_scene(scene, rng)
+    _, enc = cv2.imencode(".jpg", img)
+
+    res = client.post(
+        "/inspect/image",
+        files={"file": ("multi_billet.jpg", bytes(enc.tobytes()), "image/jpeg")},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    # The inspected lower billet must NOT be assigned K24-7059 from the upper billet
+    assert data["billet_id"] != "K24-7059"

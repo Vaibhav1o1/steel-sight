@@ -343,6 +343,19 @@ export function uploadedImageUrl(imageId: string): string {
   return `${API_BASE}/inspect/image/${imageId}.jpg`;
 }
 
+export function getTestDataset(): Promise<import("./upload_types").TestDatasetImageItem[]> {
+  return requestJson<import("./upload_types").TestDatasetImageItem[]>("/inspect/test-dataset");
+}
+
+export function inspectTestDatasetImage(
+  imageName: string,
+): Promise<import("./upload_types").TestInspectResponse> {
+  return requestJson<import("./upload_types").TestInspectResponse>(
+    `/inspect/test-dataset/${encodeURIComponent(imageName)}`,
+    { method: "POST" },
+  );
+}
+
 // ── Analytics ──────────────────────────────────────
 export function getStatusSeries(
   params?: import("./analytics_types").StatusSeriesParams,

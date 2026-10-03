@@ -8,9 +8,15 @@ from fastapi import APIRouter, File, HTTPException, Query, Response, UploadFile
 from starlette.concurrency import run_in_threadpool
 
 from billetvision.api.deps import StateDep
-from billetvision.schemas_upload import UploadResult
+from billetvision.schemas_upload import (
+    TestDatasetImageItem,
+    TestInspectResponse,
+    UploadResult,
+)
 from billetvision.vision.upload_inspect import (
     get_cached_image,
+    inspect_test_dataset_image,
+    list_test_dataset_images,
     process_upload_image,
 )
 
@@ -27,7 +33,7 @@ async def inspect_uploaded_image(
     station_camera: Annotated[bool, Query()] = False,
 ) -> UploadResult:
     """Inspect an arbitrary uploaded image without storing to DB."""
-    # (a) Enforce 15 MB limit while streaming/reading chunks
+    # Enforce 15 MB limit while streaming/reading chunks
     chunk_size = 1024 * 64
     total_bytes = bytearray()
     while True:
@@ -114,3 +120,27 @@ async def get_uploaded_annotated_image(image_id: str) -> Response:
         )
 
     return Response(content=jpeg_bytes, media_type="image/jpeg")
+
+
+@router.get("/inspect/test-dataset", response_model=list[TestDatasetImageItem])
+async def get_test_dataset() -> list[TestDatasetImageItem]:
+    """List available test dataset images with metadata and ground truth."""
+    return await run_in_threadpool(list_test_dataset_images)
+
+
+@router.post("/inspect/test-dataset/{image_name}", response_model=TestInspectResponse)
+async def inspect_test_image(image_name: str) -> TestInspectResponse:
+    """Run upload inspection on a test dataset image and return comparison against ground truth."""
+    async with _upload_semaphore:
+        try:
+            return await run_in_threadpool(inspect_test_dataset_image, image_name)
+        except FileNotFoundError as e:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": str(e)},
+            ) from e
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "BAD_REQUEST", "message": str(e)},
+            ) from e
