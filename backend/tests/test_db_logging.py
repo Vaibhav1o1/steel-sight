@@ -116,3 +116,126 @@ def test_meta_get_and_set(test_engine) -> None:
     updated_data = {"status": "recalibrated", "drift_mm": 0.0}
     meta_set("calibration", updated_data, engine=test_engine)
     assert meta_get("calibration", engine=test_engine) == updated_data
+
+
+def test_schema_version_recorded(test_engine) -> None:
+    ver = meta_get("schema_version", engine=test_engine)
+    assert ver == 1
+
+
+def _sample_inspection_data(idx: int) -> dict:
+    return {
+        "ts": f"2026-10-04T12:00:{idx:02d}.000Z",
+        "billet_id": f"H24-{1000 + idx}",
+        "id_source": "ocr",
+        "ocr_text": f"H24-{1000 + idx}",
+        "ocr_confidence": 0.95,
+        "ocr_agreement": 1.0,
+        "qr_text": f"H24-{1000 + idx}",
+        "id_mismatch": 0,
+        "length_mm": 500.2,
+        "width_mm": 100.1,
+        "height_mm": None,
+        "length_dev_mm": 0.2,
+        "width_dev_mm": 0.1,
+        "width_variation_pct": 0.8,
+        "taper_mm": 0.2,
+        "camber_mm": 0.3,
+        "min_width_mm": 99.8,
+        "max_width_mm": 100.3,
+        "width_profile_mm": [100.1] * 21,
+        "defects": [],
+        "status": "Pass",
+        "auto_status": "Pass",
+        "reasons": ["Within spec"],
+        "spec_id": "FLAT-500x100",
+        "n_samples": 7,
+        "angle_deg": 0.0,
+        "latency_ms": 12.0,
+        "snapshot_path": f"evidence/{idx}.jpg",
+        "source": "synthetic",
+        "track_id": idx,
+        "override": None,
+        "created_at": time.time(),
+    }
+
+
+def test_concurrent_read_during_write(tmp_path) -> None:
+    import threading
+
+    from billetvision.db import insert_inspection, inspections_table
+
+    db_path = tmp_path / "wal_concurrency.db"
+    url = f"sqlite:///{db_path}"
+    engine = get_engine(url)
+    init_db(engine)
+
+    n_records = 30
+    write_errors: list[Exception] = []
+    read_errors: list[Exception] = []
+    reads_done = 0
+
+    def writer():
+        for i in range(n_records):
+            try:
+                insert_inspection(_sample_inspection_data(i), engine=engine)
+                time.sleep(0.005)
+            except Exception as e:
+                write_errors.append(e)
+
+    def reader():
+        nonlocal reads_done
+        for _ in range(n_records * 2):
+            try:
+                with engine.connect() as conn:
+                    conn.execute(select(inspections_table.c.id)).fetchall()
+                reads_done += 1
+                time.sleep(0.002)
+            except Exception as e:
+                read_errors.append(e)
+
+    w_thread = threading.Thread(target=writer)
+    r_thread = threading.Thread(target=reader)
+
+    w_thread.start()
+    r_thread.start()
+
+    w_thread.join(timeout=10.0)
+    r_thread.join(timeout=10.0)
+
+    assert not write_errors, f"Writer encountered errors: {write_errors}"
+    assert not read_errors, f"Reader encountered errors: {read_errors}"
+    assert reads_done > 0
+
+    with engine.connect() as conn:
+        final_count = len(conn.execute(select(inspections_table.c.id)).fetchall())
+        assert final_count == n_records
+
+
+def test_crash_safety(tmp_path) -> None:
+    from billetvision.db import insert_inspection, inspections_table
+
+    db_path = tmp_path / "crash_safety.db"
+    url = f"sqlite:///{db_path}"
+
+    # Step 1: Initial engine and insert 15 records
+    engine1 = get_engine(url)
+    init_db(engine1)
+    for i in range(15):
+        insert_inspection(_sample_inspection_data(i), engine=engine1)
+
+    # Step 2: Abruptly dispose the engine connection pool
+    engine1.dispose()
+
+    # Step 3: Reopen database from disk using a fresh engine
+    engine2 = get_engine(url)
+    init_db(engine2)  # idempotent
+
+    with engine2.connect() as conn:
+        rows = conn.execute(select(inspections_table.c.id)).fetchall()
+        assert len(rows) == 15
+
+    # Step 4: Continue writing safely
+    new_id = insert_inspection(_sample_inspection_data(15), engine=engine2)
+    assert new_id == 16
+    engine2.dispose()

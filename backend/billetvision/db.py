@@ -167,11 +167,18 @@ def get_engine(database_url: str | None = None) -> Engine:
 
 
 def init_db(engine: Engine | None = None) -> None:
-    """Initialize database tables and seed default spec if specs table is empty."""
+    """Initialize database tables, record schema version in meta, and seed default spec if empty."""
     eng = engine or get_engine()
     metadata.create_all(eng)
 
     with eng.begin() as conn:
+        # Schema versioning in meta
+        ver_row = conn.execute(
+            select(meta_table.c.value).where(meta_table.c.key == "schema_version")
+        ).fetchone()
+        if ver_row is None:
+            conn.execute(meta_table.insert().values(key="schema_version", value=json.dumps(1)))
+
         result = conn.execute(select(specs_table.c.id).limit(1)).fetchone()
         if result is None:
             now = time.time()
@@ -179,6 +186,31 @@ def init_db(engine: Engine | None = None) -> None:
             seed_row["created_at"] = now
             conn.execute(specs_table.insert().values(**seed_row))
             logger.info("Initialized DB and seeded default spec FLAT-500x100")
+
+
+def insert_inspection(record: dict[str, Any], engine: Engine | None = None) -> int:
+    """Insert a single inspection record in its own transaction, returning the inserted id."""
+    eng = engine or get_engine()
+    # Normalize record fields: ensure JSON fields are serialized if passed as lists/dicts
+    rec = dict(record)
+    if isinstance(rec.get("width_profile_mm"), (list, tuple)):
+        rec["width_profile_mm"] = json.dumps(rec["width_profile_mm"])
+    if isinstance(rec.get("defects"), (list, tuple)):
+        rec["defects"] = json.dumps(rec["defects"])
+    if isinstance(rec.get("reasons"), (list, tuple)):
+        rec["reasons"] = json.dumps(rec["reasons"])
+    if isinstance(rec.get("override"), dict):
+        rec["override"] = json.dumps(rec["override"])
+
+    # Alias handling: support cs_var_pct if width_variation_pct is not given
+    if "width_variation_pct" not in rec and "cs_var_pct" in rec:
+        rec["width_variation_pct"] = rec.pop("cs_var_pct")
+    elif "cs_var_pct" in rec:
+        rec.pop("cs_var_pct")
+
+    with eng.begin() as conn:
+        res = conn.execute(inspections_table.insert().values(**rec))
+        return int(res.inserted_primary_key[0])
 
 
 def set_active_spec(spec_id: str, engine: Engine | None = None) -> None:
