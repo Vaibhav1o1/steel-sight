@@ -30,3 +30,9 @@
 - **Worker system_alerts**: Added `system_alerts` queue drain to OcrWorkerThread; pipeline never touches DB.
 - **Alert rate-limiting**: `_AlertGate` with 30s cooldown per key prevents alert spam.
 - **glare_mask**: Returns `uint8` (0/255), not `bool_` — compatible with `measure()`'s optional glare param.
+
+## T21 — Evidence Generation
+
+- Evidence is generated for FAIL, REWORK, REVIEW, and BORDERLINE statuses.
+- Annotations: Bounding box, center point, ID, dimensions, defect locations (if any), timestamp.
+- Saved in `evidence/<inspection_id>.jpg` (directory `config.SNAPSHOT_DIR`).

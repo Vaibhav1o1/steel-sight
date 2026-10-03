@@ -181,8 +181,11 @@ class ProcessingThread(threading.Thread):
             self._record(t0)
             return True
 
+        # 1. Undistort
+        t_undistort_start = time.monotonic()
         rect_bgr = snap.rectifier.apply(frame)
         rect_gray = cv2.cvtColor(rect_bgr, cv2.COLOR_BGR2GRAY)
+        t_undistort = time.monotonic() - t_undistort_start
 
         # Paused: keep feed alive, inspect nothing
         if snap.paused:
@@ -198,6 +201,8 @@ class ProcessingThread(threading.Thread):
             self._record(t0)
             return True
 
+        # 2. Segment
+        t_segment_start = time.monotonic()
         glare = glare_mask(rect_gray)
         detections = segment(
             rect_gray,
@@ -206,6 +211,7 @@ class ProcessingThread(threading.Thread):
             roi=snap.rectifier.roi,
             rect_px_per_mm=snap.rectifier.cal.rect_px_per_mm,
         )
+        t_segment = time.monotonic() - t_segment_start
 
         # PRD E-07: merged billets
         if any(d.merged for d in detections):
@@ -215,15 +221,30 @@ class ProcessingThread(threading.Thread):
                 now,
             )
 
+        # 3. Measure + Track
+        measure_ms = [0.0]
+
         def measure_fn(
             det: Detection,
         ) -> tuple:
-            return measure(det, rect_gray, rect_bgr, glare)
+            t_m = time.monotonic()
+            res = measure(det, rect_gray, rect_bgr, glare)
+            measure_ms[0] += (time.monotonic() - t_m) * 1000.0
+            return res
 
+        t_track_start = time.monotonic()
         tracker = self._tracker_for(snap)
         finalized = tracker.update(
             detections, latest.t_monotonic, measure_fn=measure_fn
         )
+        t_track = (time.monotonic() - t_track_start) * 1000.0 - measure_ms[0]
+
+        # Update timings in state (converting to ms)
+        with self._state.lock:
+            self._state.stage_timings["undistort"] = t_undistort * 1000.0
+            self._state.stage_timings["segment"] = t_segment * 1000.0
+            self._state.stage_timings["track"] = t_track
+            self._state.stage_timings["measure"] = measure_ms[0]
 
         annotated = _minimal_overlay(
             frame,

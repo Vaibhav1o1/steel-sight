@@ -87,17 +87,20 @@ class OcrWorkerThread(threading.Thread):
         from billetvision.vision.ocr import read as ocr_read
         from billetvision.vision.qr import read_qr
 
+        t_id_start = time.monotonic()
         id_res = read_id(
             list(job.crops),
             ocr_fn=ocr_read,
             qr_fn=read_qr,
             template=job.spec.id_template,
         )
+        t_id = (time.monotonic() - t_id_start) * 1000.0
 
         # 4. Decide final status
         calib_drift = self._state.calib_drift_alert
         borderline = False
 
+        t_decide_start = time.monotonic()
         decision = decide(
             measurement=agg_meas,
             defects=defects,
@@ -109,6 +112,7 @@ class OcrWorkerThread(threading.Thread):
             calib_drift=calib_drift,
             borderline=borderline,
         )
+        t_decide = (time.monotonic() - t_decide_start) * 1000.0
 
         # 5. Build Inspection record
         now = time.time()
@@ -116,11 +120,11 @@ class OcrWorkerThread(threading.Thread):
             time.strftime("%Y-%m-%dT%H:%M:%S")
             + f".{int((now % 1) * 1000):03d}Z"
         )
-
+        inspection_id = int(now * 1000) % 2147483647
         latency = (time.monotonic() - job.first_sample_t) * 1000.0
 
         inspection = Inspection(
-            id=int(now * 1000) % 2147483647,
+            id=inspection_id,
             ts=ts_str,
             billet_id=id_res.billet_id,
             id_source=id_res.id_source,
@@ -152,7 +156,7 @@ class OcrWorkerThread(threading.Thread):
             n_samples=len(job.samples),
             angle_deg=agg_meas.angle_deg,
             latency_ms=latency,
-            snapshot_url=f"/snapshot/{int(now * 1000)}.jpg",
+            snapshot_url=f"/inspections/{inspection_id}/snapshot.jpg",
             source=job.source,
             track_id=job.track_id,
             override=None,
@@ -166,8 +170,37 @@ class OcrWorkerThread(threading.Thread):
                 diff / agg_meas.width_mm
             ) * 100.0
 
+        # T21 Evidence Generation
+        from billetvision.runtime.evidence import generate_evidence
+
+        if job.crops:
+            evidence_url = generate_evidence(inspection, job.crops[0])
+            if evidence_url:
+                # Prompt says: "Saved under evidence/<record_id>.jpg and referenced in the record."
+                inspection.snapshot_url = evidence_url
+        else:
+            # If we somehow have no crops but it failed, fallback logic
+            pass
+
+        # Also save the original full snapshot jpeg just in case the API needs it?
+        # Let's save the raw snapshot to disk so /inspections/{id}/snapshot.jpg works.
+        import os
+
+        from billetvision import config
+        snap_dir = os.path.join(config.SNAPSHOT_DIR)
+        os.makedirs(snap_dir, exist_ok=True)
+        with open(os.path.join(snap_dir, f"{inspection_id}.jpg"), "wb") as f:
+            f.write(job.snapshot_jpeg)
+
         # Enqueue for DB/Excel write
+        t_write_start = time.monotonic()
         self._db_logger.log_inspection(inspection.model_dump())
+        t_write = (time.monotonic() - t_write_start) * 1000.0
+
+        with self._state.lock:
+            self._state.stage_timings["id"] = t_id
+            self._state.stage_timings["decide"] = t_decide
+            self._state.stage_timings["write"] = t_write
 
         # Publish event
         self._bus.publish(
