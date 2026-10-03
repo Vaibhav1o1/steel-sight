@@ -1,0 +1,105 @@
+{
+  "n": 45,
+  "generated_at": 1791010930.276392,
+  "overall": {
+    "n": 45,
+    "length_mae_pct": 0.17,
+    "length_max_pct": 0.41,
+    "width_mae_pct": 0.44,
+    "width_max_pct": 0.59,
+    "ocr_accuracy": 1.0
+  },
+  "variants": {
+    "clean": {
+      "n": 5,
+      "length_mae_pct": 0.12,
+      "length_max_pct": 0.15,
+      "width_mae_pct": 0.45,
+      "width_max_pct": 0.59,
+      "ocr_accuracy": 1.0
+    },
+    "dim": {
+      "n": 5,
+      "length_mae_pct": 0.16,
+      "length_max_pct": 0.23,
+      "width_mae_pct": 0.47,
+      "width_max_pct": 0.55,
+      "ocr_accuracy": 1.0
+    },
+    "bright": {
+      "n": 5,
+      "length_mae_pct": 0.19,
+      "length_max_pct": 0.25,
+      "width_mae_pct": 0.46,
+      "width_max_pct": 0.52,
+      "ocr_accuracy": 1.0
+    },
+    "gradient": {
+      "n": 5,
+      "length_mae_pct": 0.18,
+      "length_max_pct": 0.21,
+      "width_mae_pct": 0.43,
+      "width_max_pct": 0.49,
+      "ocr_accuracy": 1.0
+    },
+    "noise": {
+      "n": 5,
+      "length_mae_pct": 0.16,
+      "length_max_pct": 0.2,
+      "width_mae_pct": 0.44,
+      "width_max_pct": 0.53,
+      "ocr_accuracy": 1.0
+    },
+    "blur": {
+      "n": 5,
+      "length_mae_pct": 0.27,
+      "length_max_pct": 0.41,
+      "width_mae_pct": 0.54,
+      "width_max_pct": 0.57,
+      "ocr_accuracy": 1.0
+    },
+    "dust": {
+      "n": 5,
+      "length_mae_pct": 0.15,
+      "length_max_pct": 0.2,
+      "width_mae_pct": 0.35,
+      "width_max_pct": 0.42,
+      "ocr_accuracy": 1.0
+    },
+    "scale": {
+      "n": 5,
+      "length_mae_pct": 0.15,
+      "length_max_pct": 0.24,
+      "width_mae_pct": 0.4,
+      "width_max_pct": 0.49,
+      "ocr_accuracy": 1.0
+    },
+    "glare": {
+      "n": 5,
+      "length_mae_pct": 0.19,
+      "length_max_pct": 0.22,
+      "width_mae_pct": 0.44,
+      "width_max_pct": 0.5,
+      "ocr_accuracy": 1.0
+    }
+  },
+  "defect_accuracy": 0.6667,
+  "mean_process_ms": 321.9,
+  "source": "SYNTHETIC",
+  "confusion_matrix": {
+    "n": 45,
+    "overall_accuracy": 0.6444444444444445,
+    "wrong_pass": 15,
+    "wrong_pass_rate": 0.3333333333333333,
+    "matrix": {
+      "Pass": {
+        "Pass": 15
+      },
+      "Rework": {
+        "Rework": 14,
+        "Pass": 15,
+        "Fail": 1
+      }
+    }
+  }
+}
