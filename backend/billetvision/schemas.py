@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from .enums import (
     AlertLevel,
@@ -14,9 +14,31 @@ from .enums import (
     TriggerMode,
 )
 
+# Canonical export columns in exact order (PDF Page 8, §6.1 / 03 §5)
+EXPORT_COLUMNS: tuple[str, ...] = (
+    "record_id",
+    "timestamp",
+    "track_id",
+    "billet_id",
+    "id_source",
+    "id_confidence",
+    "length_mm",
+    "width_mm",
+    "width_variation_pct",
+    "camber_mm",
+    "notch_depth_mm",
+    "taper_mm",
+    "status",
+    "reason_codes",
+    "flags",
+    "calib_version",
+    "frames_used",
+    "evidence_image",
+)
+
 
 class Contract(BaseModel):
-    model_config = ConfigDict(extra="forbid", use_enum_values=True)
+    model_config = ConfigDict(extra="forbid", use_enum_values=True, populate_by_name=True)
 
 
 # ── Specs ───────────────────────────────────────────
@@ -80,7 +102,7 @@ class Inspection(Contract):
     height_mm: float | None
     length_dev_mm: float
     width_dev_mm: float
-    cs_var_pct: float
+    width_variation_pct: float = Field(validation_alias=AliasChoices("width_variation_pct", "cs_var_pct"))
     taper_mm: float
     camber_mm: float
     min_width_mm: float
@@ -99,6 +121,10 @@ class Inspection(Contract):
     track_id: int
     override: Override | None
     created_at: float
+
+    @property
+    def cs_var_pct(self) -> float:
+        return self.width_variation_pct
 
 
 class InspectionPatch(Contract):
@@ -159,6 +185,12 @@ class CalibrationState(Contract):
     drift_mm: float | None
     drift_ok: bool
     created_at: float | None
+    calib_version: str = "cal-001"
+    baseline: str = "reduced-baseline"
+    residual_mm: float = 0.0
+    marker_plane_height_mm: float = 50.0
+    marker_side_measured_mm: float | None = None
+    warning: str | None = None
 
 
 class MarkerResult(Contract):

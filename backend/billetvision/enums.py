@@ -7,6 +7,7 @@ class InspectionStatus(StrEnum):
     Pass = "Pass"
     Rework = "Rework"
     Fail = "Fail"
+    Review = "Review"
 
 
 class IdSource(StrEnum):
@@ -39,6 +40,8 @@ class AlertLevel(StrEnum):
     Fail = "Fail"
     Rework = "Rework"
     System = "System"
+    Review = "Review"
+    CALIB_DRIFT = "CALIB_DRIFT"
 
 
 class LogFileStatus(StrEnum):

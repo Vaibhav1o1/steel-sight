@@ -278,6 +278,81 @@ def test_vision_types_dataclasses() -> None:
         id_mismatch=False,
     )
     assert id_result.billet_id == "H24-1187"
-
     decision = Decision(status="Pass", reasons=())
     assert decision.status == "Pass"
+
+
+def test_export_columns_order_and_width_variation_pct_alias() -> None:
+    from billetvision.schemas import EXPORT_COLUMNS
+
+    expected_columns = (
+        "record_id",
+        "timestamp",
+        "track_id",
+        "billet_id",
+        "id_source",
+        "id_confidence",
+        "length_mm",
+        "width_mm",
+        "width_variation_pct",
+        "camber_mm",
+        "notch_depth_mm",
+        "taper_mm",
+        "status",
+        "reason_codes",
+        "flags",
+        "calib_version",
+        "frames_used",
+        "evidence_image",
+    )
+    assert EXPORT_COLUMNS == expected_columns
+
+    # Verify both width_variation_pct and cs_var_pct are accepted and map to canonical name
+    base_dict = {
+        "id": 1,
+        "ts": "2026-10-04T14:32:10.482+05:30",
+        "billet_id": "H24-1187",
+        "id_source": "ocr",
+        "ocr_text": "H24-1187",
+        "ocr_confidence": 0.8,
+        "ocr_agreement": 1.0,
+        "qr_text": "H24-1187",
+        "id_mismatch": False,
+        "length_mm": 599.4,
+        "width_mm": 100.3,
+        "height_mm": None,
+        "length_dev_mm": -0.6,
+        "width_dev_mm": 0.3,
+        "taper_mm": 0.4,
+        "camber_mm": 0.9,
+        "min_width_mm": 99.5,
+        "max_width_mm": 100.7,
+        "width_profile_mm": [100.3] * 21,
+        "defects": [],
+        "status": "Pass",
+        "auto_status": "Pass",
+        "reasons": [],
+        "spec_id": "FLAT-500x100",
+        "n_samples": 7,
+        "angle_deg": 0.0,
+        "latency_ms": 12.0,
+        "snapshot_url": "evidence/1.jpg",
+        "source": "synthetic",
+        "track_id": 41,
+        "override": None,
+        "created_at": 1700000000.0,
+    }
+
+    # Case 1: with width_variation_pct
+    d1 = dict(base_dict, width_variation_pct=1.2)
+    insp1 = Inspection.model_validate(d1)
+    assert insp1.width_variation_pct == 1.2
+    assert insp1.cs_var_pct == 1.2
+    assert "width_variation_pct" in insp1.model_dump()
+
+    # Case 2: with legacy alias cs_var_pct
+    d2 = dict(base_dict, cs_var_pct=1.5)
+    insp2 = Inspection.model_validate(d2)
+    assert insp2.width_variation_pct == 1.5
+    assert insp2.cs_var_pct == 1.5
+    assert "width_variation_pct" in insp2.model_dump()

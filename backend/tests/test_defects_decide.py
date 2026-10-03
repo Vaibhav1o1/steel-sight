@@ -276,3 +276,25 @@ def test_decision_status_precedence_fail_over_rework(default_spec: Spec) -> None
     assert any("below minimum" in r for r in decision.reasons)
     assert any("over maximum" in r for r in decision.reasons)
     assert any("Camber" in r for r in decision.reasons)
+
+
+def test_decision_review_on_calibration_drift(default_spec: Spec) -> None:
+    # A billet that is otherwise perfect must be set to Review when calibration drift is active
+    m = _make_dummy_measurement(length_mm=400.0, width_mm=100.0)
+    d = _make_dummy_defects()
+    decision = decide(m, d, default_spec, billet_id="H24-1187", calib_drift=True)
+
+    assert decision.status == "Review"
+    assert "CALIB_DRIFT" in decision.flags
+    assert any("CALIB_DRIFT" in r for r in decision.reasons)
+
+
+def test_decision_review_on_borderline(default_spec: Spec) -> None:
+    # A borderline measurement without defects receives Review status and BORDERLINE flag
+    m = _make_dummy_measurement(length_mm=400.0, width_mm=100.0)
+    d = _make_dummy_defects()
+    decision = decide(m, d, default_spec, billet_id="H24-1187", borderline=True)
+
+    assert decision.status == "Review"
+    assert "BORDERLINE" in decision.flags
+    assert any("BORDERLINE" in r for r in decision.reasons)

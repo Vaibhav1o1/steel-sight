@@ -76,7 +76,7 @@ def aggregate_defects(defect_results: Sequence[DefectResult]) -> DefectResult:
     )
 
     return DefectResult(
-        cs_var_pct=cs_var_pct,
+        width_variation_pct=cs_var_pct,
         taper_mm=taper_mm,
         camber_mm=camber_mm,
         min_width_mm=min_width_mm,

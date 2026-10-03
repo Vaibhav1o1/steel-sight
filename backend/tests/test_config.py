@@ -116,11 +116,11 @@ def test_config_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_enums_values_match_contracts() -> None:
-    assert [e.value for e in InspectionStatus] == ["Pass", "Rework", "Fail"]
+    assert [e.value for e in InspectionStatus] == ["Pass", "Rework", "Fail", "Review"]
     assert [e.value for e in IdSource] == ["ocr", "qr", "none"]
     assert [e.value for e in DefectType] == ["notch", "taper", "bulge", "camber"]
     assert [e.value for e in SourceType] == ["webcam", "url", "file", "synthetic"]
     assert [e.value for e in TriggerMode] == ["auto", "stable", "line"]
-    assert [e.value for e in AlertLevel] == ["Fail", "Rework", "System"]
+    assert [e.value for e in AlertLevel] == ["Fail", "Rework", "System", "Review", "CALIB_DRIFT"]
     assert [e.value for e in LogFileStatus] == ["ok", "locked", "error"]
     assert [e.value for e in StreamView] == ["annotated", "rectified", "raw"]

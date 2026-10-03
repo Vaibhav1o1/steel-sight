@@ -25,6 +25,13 @@ class Calibration:
     image_size: tuple[int, int]  # (w, h)
     reprojection_error_px: float
     created_at: float
+    calib_version: str = "cal-001"
+    marker_plane_height_mm: float = 50.0
+    marker_side_measured_mm: float | None = None
+    baseline: str = "reduced-baseline"
+    residual_mm: float = 0.0
+    per_marker_residuals_mm: dict[int, float] | None = None
+    warning: str | None = None
 
 
 @dataclass(frozen=True, eq=False)
@@ -54,13 +61,41 @@ class Measurement:
 
 @dataclass(frozen=True, eq=False)
 class DefectResult:
-    cs_var_pct: float
+    width_variation_pct: float
     taper_mm: float
     camber_mm: float
     min_width_mm: float
     max_width_mm: float
     defects: tuple[str, ...]  # DefectType values
     notch_depth_mm: float
+
+    def __init__(
+        self,
+        width_variation_pct: float | None = None,
+        taper_mm: float = 0.0,
+        camber_mm: float = 0.0,
+        min_width_mm: float = 0.0,
+        max_width_mm: float = 0.0,
+        defects: tuple[str, ...] = (),
+        notch_depth_mm: float = 0.0,
+        cs_var_pct: float | None = None,
+    ) -> None:
+        val = (
+            width_variation_pct
+            if width_variation_pct is not None
+            else (cs_var_pct if cs_var_pct is not None else 0.0)
+        )
+        object.__setattr__(self, "width_variation_pct", float(val))
+        object.__setattr__(self, "taper_mm", float(taper_mm))
+        object.__setattr__(self, "camber_mm", float(camber_mm))
+        object.__setattr__(self, "min_width_mm", float(min_width_mm))
+        object.__setattr__(self, "max_width_mm", float(max_width_mm))
+        object.__setattr__(self, "defects", tuple(defects))
+        object.__setattr__(self, "notch_depth_mm", float(notch_depth_mm))
+
+    @property
+    def cs_var_pct(self) -> float:
+        return self.width_variation_pct
 
 
 @dataclass
@@ -102,3 +137,4 @@ class IdResult:
 class Decision:
     status: str  # InspectionStatus
     reasons: tuple[str, ...]
+    flags: tuple[str, ...] = ()

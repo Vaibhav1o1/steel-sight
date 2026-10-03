@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import cv2
 import numpy as np
+import pytest
 
 from billetvision.schemas import CalibrationState
 from billetvision.vision.calibration import (
@@ -142,3 +144,76 @@ def test_calibration_to_state() -> None:
     assert state.has_background is True
     assert state.drift_mm == 0.2
     assert state.drift_ok is True
+    assert state.baseline == "reduced-baseline"
+    assert state.warning is not None
+
+
+def test_multi_marker_calibration_and_residuals() -> None:
+    from billetvision.vision.calibration import calibrate_from_markers
+
+    marker_mm = 80.0
+    half_m = marker_mm / 2.0
+    # Simulate 4 markers at 4 known bed positions
+    marker_locs = {
+        0: (-100.0, -150.0),
+        1: (650.0, -150.0),
+        2: (650.0, 150.0),
+        3: (-100.0, 150.0),
+    }
+    # Image coords map via scale + offset:
+    # img_x = (bed_x + 300) * 2, img_y = (bed_y + 300) * 2
+    markers = {}
+    for mid, (cx, cy) in marker_locs.items():
+        bed_c = np.array(
+            [
+                [cx - half_m, cy - half_m],
+                [cx + half_m, cy - half_m],
+                [cx + half_m, cy + half_m],
+                [cx - half_m, cy + half_m],
+            ]
+        )
+        img_c = (bed_c + 300.0) * 2.0
+        markers[mid] = img_c
+
+    cal = calibrate_from_markers(
+        markers=markers,
+        marker_mm=marker_mm,
+        marker_positions=marker_locs,
+        marker_side_measured_mm=79.9,
+    )
+
+    assert cal.baseline == "full-baseline"
+    assert cal.warning is None
+    assert cal.residual_mm < 0.1
+    assert cal.per_marker_residuals_mm is not None
+    assert len(cal.per_marker_residuals_mm) == 4
+    for mid in (0, 1, 2, 3):
+        assert cal.per_marker_residuals_mm[mid] < 0.1
+
+
+def test_save_calibration_refusal(tmp_path: Path) -> None:
+    corners = np.array(
+        [[100.0, 400.0], [300.0, 400.0], [300.0, 600.0], [100.0, 600.0]],
+        dtype=np.float64,
+    )
+    cal = calibrate_from_marker(corners, (1920, 1080), marker_mm=80.0)
+
+    # 1. Missing measured marker side -> refuses
+    cal_no_measured = replace(cal, marker_side_measured_mm=None)
+    with pytest.raises(ValueError, match="measured marker side is missing or invalid"):
+        save_calibration(cal_no_measured, tmp_path / "cal1.json")
+
+    # 2. Measured side <= 0 -> refuses
+    cal_zero_measured = replace(cal, marker_side_measured_mm=-5.0)
+    with pytest.raises(ValueError, match="measured marker side is missing or invalid"):
+        save_calibration(cal_zero_measured, tmp_path / "cal2.json")
+
+    # 3. Residual exceeds configured limit -> refuses
+    cal_high_res = replace(cal, marker_side_measured_mm=80.0, residual_mm=2.5)
+    with pytest.raises(ValueError, match="exceeds limit"):
+        save_calibration(cal_high_res, tmp_path / "cal3.json")
+
+    # 4. Valid calibration saves successfully
+    cal_valid = replace(cal, marker_side_measured_mm=79.8, residual_mm=0.2)
+    save_calibration(cal_valid, tmp_path / "cal4.json")
+    assert (tmp_path / "cal4.json").is_file()

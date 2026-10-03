@@ -13,8 +13,10 @@ def decide(
     id_mismatch: bool = False,
     ocr_text: str | None = None,
     qr_text: str | None = None,
+    calib_drift: bool = False,
+    borderline: bool = False,
 ) -> Decision:
-    """Evaluate inspection rules and produce a PASS / REWORK / REJECT decision with reason strings."""
+    """Evaluate inspection rules and produce a PASS / REWORK / FAIL / REVIEW decision with reason strings."""
     if id_result is not None:
         eff_id = id_result.billet_id
         eff_mismatch = id_result.id_mismatch
@@ -27,6 +29,7 @@ def decide(
         eff_qr = qr_text
 
     reasons: list[str] = []
+    flags: list[str] = []
     has_fail = False
     has_rework = False
 
@@ -91,13 +94,25 @@ def decide(
         reasons.append(f"OCR '{eff_ocr or ''}' does not match QR '{eff_qr or ''}'")
         has_rework = True
 
-    # 5. Determine status
-    if has_fail:
+    # 5. Flags
+    if borderline:
+        flags.append("BORDERLINE")
+    if calib_drift:
+        flags.append("CALIB_DRIFT")
+
+    # 6. Determine status
+    if calib_drift:
+        status = "Review"
+        reasons.insert(0, "CALIB_DRIFT: Active calibration drift exceeds limit")
+    elif has_fail:
         status = "Fail"
     elif has_rework:
         status = "Rework"
+    elif borderline:
+        status = "Review"
+        reasons.append("BORDERLINE: Measurement on tolerance boundary")
     else:
         status = "Pass"
         reasons = ["Within spec"]
 
-    return Decision(status=status, reasons=tuple(reasons))
+    return Decision(status=status, reasons=tuple(reasons), flags=tuple(flags))

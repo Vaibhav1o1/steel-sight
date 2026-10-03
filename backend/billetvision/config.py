@@ -57,6 +57,8 @@ MIN_IMAGE_PX_PER_MM: float = float(os.getenv("MIN_IMAGE_PX_PER_MM", "2.5"))
 BACKGROUND_FRAMES: int = int(os.getenv("BACKGROUND_FRAMES", "15"))
 DRIFT_CHECK_S: int = int(os.getenv("DRIFT_CHECK_S", "30"))
 DRIFT_MAX_MM: float = float(os.getenv("DRIFT_MAX_MM", "1.0"))
+CALIB_MAX_RESIDUAL_MM: float = float(os.getenv("CALIB_MAX_RESIDUAL_MM", "1.5"))
+DEFAULT_PLANE_HEIGHT_MM: float = float(os.getenv("DEFAULT_PLANE_HEIGHT_MM", "50.0"))
 
 # Segmentation
 SEG_BLUR_SIGMA: float = float(os.getenv("SEG_BLUR_SIGMA", "1.5"))

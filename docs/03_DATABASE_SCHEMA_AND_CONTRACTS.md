@@ -14,12 +14,12 @@ Conventions:
 
 | Enum | Values |
 |---|---|
-| `InspectionStatus` | `"Pass"`, `"Rework"`, `"Fail"` |
+| `InspectionStatus` | `"Pass"`, `"Rework"`, `"Fail"`, `"Review"` (v1.1: added Review for safe fallback & calibration drift) |
 | `IdSource` | `"ocr"`, `"qr"`, `"none"` |
 | `DefectType` | `"notch"`, `"taper"`, `"bulge"`, `"camber"` |
 | `SourceType` | `"webcam"`, `"url"`, `"file"`, `"synthetic"` |
 | `TriggerMode` | `"auto"`, `"stable"`, `"line"` |
-| `AlertLevel` | `"Fail"`, `"Rework"`, `"System"` |
+| `AlertLevel` | `"Fail"`, `"Rework"`, `"System"`, `"Review"`, `"CALIB_DRIFT"` |
 | `LogFileStatus` | `"ok"`, `"locked"`, `"error"` |
 | `StreamView` | `"annotated"`, `"rectified"`, `"raw"` |
 
@@ -261,6 +261,12 @@ class CalibrationState(Contract):
     drift_mm: float | None
     drift_ok: bool
     created_at: float | None
+    calib_version: str = "cal-001"       # v1.1
+    baseline: str = "reduced-baseline"   # "reduced-baseline" (single marker) or "full-baseline" (N>=4)
+    residual_mm: float = 0.0             # RMS residual in mm
+    marker_plane_height_mm: float = 50.0 # billet top face elevation
+    marker_side_measured_mm: float | None = None # physical caliper verified dimension
+    warning: str | None = None           # e.g. reduced baseline warning
 
 class MarkerResult(Contract):
     found: bool

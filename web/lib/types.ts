@@ -1,10 +1,10 @@
-export const STATUSES = ["Pass", "Rework", "Fail"] as const;
+export const STATUSES = ["Pass", "Rework", "Fail", "Review"] as const;
 export type InspectionStatus = (typeof STATUSES)[number];
 export type IdSource = "ocr" | "qr" | "none";
 export type DefectType = "notch" | "taper" | "bulge" | "camber";
 export type SourceType = "webcam" | "url" | "file" | "synthetic";
 export type TriggerMode = "auto" | "stable" | "line";
-export type AlertLevel = "Fail" | "Rework" | "System";
+export type AlertLevel = "Fail" | "Rework" | "System" | "Review" | "CALIB_DRIFT";
 export type LogFileStatus = "ok" | "locked" | "error";
 export type StreamView = "annotated" | "rectified" | "raw";
 export type UnixSeconds = number;
@@ -51,7 +51,8 @@ export interface Inspection {
   height_mm: number | null;
   length_dev_mm: number;
   width_dev_mm: number;
-  cs_var_pct: number;
+  width_variation_pct: number;
+  cs_var_pct?: number;
   taper_mm: number;
   camber_mm: number;
   min_width_mm: number;

@@ -37,7 +37,7 @@ CREATE TABLE inspections (
   height_mm           REAL NULL,                 -- only with optional side camera
   length_dev_mm       REAL NOT NULL,             -- measured − nominal
   width_dev_mm        REAL NOT NULL,
-  cs_var_pct          REAL NOT NULL,
+  width_variation_pct REAL NOT NULL,
   taper_mm            REAL NOT NULL,
   camber_mm           REAL NOT NULL,
   min_width_mm        REAL NOT NULL,

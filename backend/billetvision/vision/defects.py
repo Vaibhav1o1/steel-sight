@@ -59,7 +59,7 @@ def detect_defects(
 
     if len(pos) < 10:
         return DefectResult(
-            cs_var_pct=cs_var_pct,
+            width_variation_pct=cs_var_pct,
             taper_mm=0.0,
             camber_mm=0.0,
             min_width_mm=min_w,
@@ -114,7 +114,7 @@ def detect_defects(
         defects.append("camber")
 
     return DefectResult(
-        cs_var_pct=cs_var_pct,
+        width_variation_pct=cs_var_pct,
         taper_mm=taper_mm,
         camber_mm=camber_mm,
         min_width_mm=min_w,
