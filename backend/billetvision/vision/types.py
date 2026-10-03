@@ -109,6 +109,8 @@ class Track:  # mutable, owned by the processing thread
     first_sample_t: float | None
     crossed_line: bool
     finalized: bool
+    latest_detection: Detection
+
 
 
 @dataclass(frozen=True, eq=False)

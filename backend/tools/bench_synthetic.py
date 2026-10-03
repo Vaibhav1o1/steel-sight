@@ -12,10 +12,11 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 import cv2
 import numpy as np
+from numpy.typing import NDArray
 
 from billetvision.evaluation import (
     compute_confusion_matrix,
@@ -109,12 +110,12 @@ def run_benchmark(n_scenes: int = 180, seed: int = 42) -> dict[str, Any]:
 
         # Decide defect condition for scene
         has_defect = (idx % 3) != 0  # 2/3 of scenes have defects
-        defect_type = None
+        defect_type: Literal["notch", "taper", "camber", "bulge"] | None = None
         defect_size = 0.0
         gt_status = "Pass"
 
         if has_defect:
-            defect_type = ["notch", "taper", "camber"][idx % 3]
+            defect_type = cast("Literal['notch', 'taper', 'camber', 'bulge']", ["notch", "taper", "camber"][idx % 3])
             if defect_type == "notch":
                 defect_size = 6.0
                 gt_status = "Fail"
@@ -161,16 +162,16 @@ def run_benchmark(n_scenes: int = 180, seed: int = 42) -> dict[str, Any]:
         t_proc_start = time.perf_counter()
 
         # 1. Calibration & Rectify
-        gray_bg = cv2.cvtColor(bg_img, cv2.COLOR_BGR2GRAY)
+        gray_bg = cast("NDArray[np.uint8]", cv2.cvtColor(bg_img, cv2.COLOR_BGR2GRAY))
         marker_res = detect_marker(gray_bg)
         if marker_res is None:
             continue
         cal = calibrate_from_marker(marker_res[0], (1920, 1080))
         rectifier = build_rectifier(cal)
 
-        rect_bgr = rectifier.apply(img)
-        rect_gray = cv2.cvtColor(rect_bgr, cv2.COLOR_BGR2GRAY)
-        bg_gray = cv2.cvtColor(rectifier.apply(bg_img), cv2.COLOR_BGR2GRAY)
+        rect_bgr = cast("NDArray[np.uint8]", rectifier.apply(img))
+        rect_gray = cast("NDArray[np.uint8]", cv2.cvtColor(rect_bgr, cv2.COLOR_BGR2GRAY))
+        bg_gray = cast("NDArray[np.uint8]", cv2.cvtColor(rectifier.apply(bg_img), cv2.COLOR_BGR2GRAY))
         glare = glare_mask(rect_gray)
 
         # 2. Segment

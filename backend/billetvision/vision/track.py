@@ -230,6 +230,7 @@ class Tracker:
             trk.center_mm = det.center_mm
             trk.missing = 0
             trk.history.append((t, det.center_mm))
+            trk.latest_detection = det
 
         # Unmatched existing tracks increment missing
         for tid in list(self._tracks.keys()):
@@ -252,6 +253,7 @@ class Tracker:
                     first_sample_t=None,
                     crossed_line=False,
                     finalized=False,
+                    latest_detection=det,
                 )
                 self._tracks[self._next_id] = new_track
                 matched_tracks[self._next_id] = d_idx

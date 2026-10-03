@@ -18,6 +18,7 @@ from sqlalchemy import (
     Text,
     create_engine,
     event,
+    func,
     select,
 )
 from sqlalchemy.engine import Engine
@@ -207,6 +208,11 @@ def insert_inspection(record: dict[str, Any], engine: Engine | None = None) -> i
         rec["width_variation_pct"] = rec.pop("cs_var_pct")
     elif "cs_var_pct" in rec:
         rec.pop("cs_var_pct")
+        
+    if "snapshot_url" in rec and "snapshot_path" not in rec:
+        rec["snapshot_path"] = rec.pop("snapshot_url")
+    elif "snapshot_url" in rec:
+        rec.pop("snapshot_url")
 
     with eng.begin() as conn:
         res = conn.execute(inspections_table.insert().values(**rec))
@@ -261,3 +267,78 @@ def meta_set(key: str, value: Any, engine: Engine | None = None) -> None:
             conn.execute(meta_table.update().where(meta_table.c.key == key).values(value=val_json))
         else:
             conn.execute(meta_table.insert().values(key=key, value=val_json))
+
+
+def get_inspections(
+    engine: Engine | None = None,
+    status: str | None = None,
+    billet_id: str | None = None,
+    spec_id: str | None = None,
+    since: float | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> tuple[list[Any], int]:
+    eng = engine or get_engine()
+    from billetvision.schemas import Inspection
+    with eng.connect() as conn:
+        q = select(inspections_table)
+        count_q = select(func.count(inspections_table.c.id))
+        
+        if status:
+            q = q.where(inspections_table.c.status == status)
+            count_q = count_q.where(inspections_table.c.status == status)
+        if billet_id:
+            q = q.where(inspections_table.c.billet_id == billet_id)
+            count_q = count_q.where(inspections_table.c.billet_id == billet_id)
+        if spec_id:
+            q = q.where(inspections_table.c.spec_id == spec_id)
+            count_q = count_q.where(inspections_table.c.spec_id == spec_id)
+        if since is not None:
+            q = q.where(inspections_table.c.created_at >= since)
+            count_q = count_q.where(inspections_table.c.created_at >= since)
+            
+        total = conn.execute(count_q).scalar() or 0
+        
+        q = q.order_by(inspections_table.c.id.desc()).limit(limit).offset(offset)
+        rows = conn.execute(q).mappings().all()
+        
+        items = []
+        for row in rows:
+            d = dict(row)
+            if isinstance(d.get("width_profile_mm"), str):
+                d["width_profile_mm"] = json.loads(d["width_profile_mm"])
+            if isinstance(d.get("defects"), str):
+                d["defects"] = json.loads(d["defects"])
+            if isinstance(d.get("reasons"), str):
+                d["reasons"] = json.loads(d["reasons"])
+            if isinstance(d.get("override"), str):
+                d["override"] = json.loads(d["override"])
+            d["snapshot_url"] = f"/inspections/{d['id']}/snapshot.jpg"
+            if "snapshot_path" in d:
+                del d["snapshot_path"]
+                
+            items.append(Inspection(**d))
+            
+        return items, total
+
+def get_alerts(engine: Engine | None = None, limit: int = 50) -> list[Any]:
+    eng = engine or get_engine()
+    from billetvision.schemas import Alert
+    with eng.connect() as conn:
+        q = select(alerts_table).order_by(alerts_table.c.id.desc()).limit(limit)
+        rows = conn.execute(q).mappings().all()
+        return [Alert(**dict(r)) for r in rows]
+
+def ack_alert(alert_id: int, engine: Engine | None = None) -> Any:
+    eng = engine or get_engine()
+    from billetvision.schemas import Alert
+    with eng.begin() as conn:
+        conn.execute(
+            alerts_table.update().where(alerts_table.c.id == alert_id).values(acknowledged=1)
+        )
+        row = conn.execute(
+            select(alerts_table).where(alerts_table.c.id == alert_id)
+        ).mappings().first()
+        if not row:
+            raise ValueError(f"Alert {alert_id} not found")
+        return Alert(**dict(row))

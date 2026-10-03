@@ -8,13 +8,10 @@ import { Camera, CheckCircle2, FileSpreadsheet, Gauge } from "lucide-react";
 import { MuteToggle } from "./MuteToggle";
 import { ThemeToggle } from "./ThemeToggle";
 
+import { useLive } from "@/lib/live";
+
 export interface TopBarProps {
   className?: string;
-  cameraOk?: boolean;
-  calibrated?: boolean;
-  fps?: number | null;
-  latencyP95Ms?: number | null;
-  logStatus?: "ok" | "locked" | "error";
 }
 
 const NAV_ITEMS = [
@@ -24,15 +21,15 @@ const NAV_ITEMS = [
   { href: "/accuracy", label: "Accuracy" },
 ] as const;
 
-export function TopBar({
-  className,
-  cameraOk = true,
-  calibrated = false,
-  fps = null,
-  latencyP95Ms = null,
-  logStatus = "ok",
-}: TopBarProps) {
+export function TopBar({ className }: TopBarProps) {
   const pathname = usePathname();
+  const { stats, writer } = useLive();
+
+  const cameraOk = stats?.camera_ok ?? false;
+  const calibrated = stats?.calibrated ?? false;
+  const fps = stats?.fps_process ?? null;
+  const latencyP95Ms = stats?.process_ms_p95 ?? null;
+  const logStatus = stats?.log_status ?? "ok";
 
   return (
     <header

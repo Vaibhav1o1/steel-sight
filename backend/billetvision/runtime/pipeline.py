@@ -170,7 +170,8 @@ class ProcessingThread(threading.Thread):
         # Not calibrated: still stream, never measure (PRD E-03)
         if snap.rectifier is None:
             self._drop_tracker()
-            annotated = _minimal_overlay(
+            from billetvision.vision.overlay import draw_hud
+            annotated = draw_hud(
                 frame,
                 calibrated=False,
                 paused=snap.paused,
@@ -190,7 +191,8 @@ class ProcessingThread(threading.Thread):
         # Paused: keep feed alive, inspect nothing
         if snap.paused:
             self._drop_tracker()
-            annotated = _minimal_overlay(
+            from billetvision.vision.overlay import draw_hud
+            annotated = draw_hud(
                 frame,
                 calibrated=True,
                 paused=True,
@@ -246,12 +248,20 @@ class ProcessingThread(threading.Thread):
             self._state.stage_timings["track"] = t_track
             self._state.stage_timings["measure"] = measure_ms[0]
 
-        annotated = _minimal_overlay(
+        from billetvision.vision.overlay import draw_detections, draw_tracks, draw_hud
+        
+        annotated = draw_hud(
             frame,
             calibrated=True,
             paused=False,
             fps=fps,
             spec_id=snap.spec.id,
+        )
+        annotated = draw_tracks(
+            annotated,
+            tracker.tracks,
+            roi=snap.rectifier.roi,
+            px_per_mm=snap.rectifier.cal.rect_px_per_mm,
         )
 
         if finalized:

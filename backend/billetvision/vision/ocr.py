@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Any
+from typing import Any, cast
 
 import cv2
 import numpy as np
@@ -28,7 +28,8 @@ def _load_engine() -> tuple[Any, bool]:
         smoke = np.zeros((50, 200, 3), dtype=np.uint8)
         cv2.putText(smoke, "TEST", (10, 38), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 2)
         result = engine(smoke)
-        txts: tuple[str, ...] = result.txts if hasattr(result, "txts") else ()
+        raw_txts = getattr(result, "txts", None)
+        txts: tuple[str, ...] = raw_txts if raw_txts is not None else ()
         ok = len(txts) > 0
         logger.info("OcrEngine loaded; smoke test %s", "PASS" if ok else "FAIL")
         return engine, ok
@@ -62,7 +63,7 @@ def _preprocess(crop_bgr: NDArray[np.uint8]) -> NDArray[np.uint8]:
     h, w = enhanced.shape[:2]
     new_size = (int(round(w * scale)), int(round(h * scale)))
     upscaled = cv2.resize(enhanced, new_size, interpolation=cv2.INTER_CUBIC)
-    return cv2.cvtColor(upscaled, cv2.COLOR_GRAY2BGR)
+    return cast(NDArray[np.uint8], cv2.cvtColor(upscaled, cv2.COLOR_GRAY2BGR))
 
 
 def _adapt_result(result: Any) -> list[tuple[str, float]]:
@@ -72,8 +73,8 @@ def _adapt_result(result: Any) -> list[tuple[str, float]]:
 
     # Modern API: result.txts and result.scores are parallel tuples
     if hasattr(result, "txts") and hasattr(result, "scores"):
-        txts: tuple[str, ...] = result.txts or ()
-        scores: tuple[float, ...] = result.scores or ()
+        txts: tuple[str, ...] = result.txts if result.txts is not None else ()
+        scores: tuple[float, ...] = result.scores if result.scores is not None else ()
         out: list[tuple[str, float]] = []
         for txt, score in zip(txts, scores, strict=False):
             if isinstance(txt, str) and isinstance(score, float | int):

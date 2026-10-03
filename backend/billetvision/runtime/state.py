@@ -58,6 +58,7 @@ class StatusSnapshot:
     calibrated: bool
     paused: bool
     log_status: str
+    drift_mm: float
 
 
 class RuntimeState:
@@ -295,6 +296,7 @@ class RuntimeState:
                 calibrated=self.rectifier is not None,
                 paused=self.paused,
                 log_status=str(self._log_status),
+                drift_mm=self.calib_drift_mm,
             )
 
     def set_log_status(self, status: str) -> None:

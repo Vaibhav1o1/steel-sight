@@ -142,7 +142,7 @@ class OcrWorkerThread(threading.Thread):
             width_dev_mm=(
                 agg_meas.width_mm - job.spec.nominal_width_mm
             ),
-            width_variation_pct=0.0,
+            width_variation_pct=defects.cs_var_pct,
             taper_mm=defects.taper_mm,
             camber_mm=defects.camber_mm,
             min_width_mm=defects.min_width_mm,
@@ -162,13 +162,6 @@ class OcrWorkerThread(threading.Thread):
             override=None,
             created_at=now,
         )
-
-        # Set width variation
-        if agg_meas.width_mm > 0:
-            diff = defects.max_width_mm - defects.min_width_mm
-            inspection.width_variation_pct = (
-                diff / agg_meas.width_mm
-            ) * 100.0
 
         # T21 Evidence Generation
         from billetvision.runtime.evidence import generate_evidence
