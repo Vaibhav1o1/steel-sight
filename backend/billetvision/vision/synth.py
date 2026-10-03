@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Literal
 
@@ -442,3 +443,142 @@ def random_scene(rng: np.random.Generator, variant: str = "clean") -> SceneSpec:
         effects=effects,
         with_marker=True,
     )
+
+
+def _generate_video_billets(
+    rng: np.random.Generator,
+    mode: Literal["conveyor", "station"],
+    n_billets: int,
+) -> list[BilletSpec]:
+    billets: list[BilletSpec] = []
+    for _ in range(n_billets):
+        length_mm = float(rng.uniform(340.0, 480.0))
+        width_mm = float(rng.uniform(85.0, 115.0))
+        if mode == "conveyor":
+            angle_deg = float(rng.uniform(-5.0, 5.0))
+        else:
+            angle_deg = float(rng.uniform(-15.0, 15.0))
+        center_y_mm = float(rng.uniform(-20.0, 20.0))
+
+        letter = str(rng.choice(list("ABCDEFGHJKLMNPRSTUVWXYZ")))
+        id_num1 = int(rng.integers(10, 100))
+        id_num2 = int(rng.integers(1000, 10000))
+        id_text = f"{letter}{id_num1:02d}-{id_num2:04d}"
+
+        qr = bool(rng.random() < 0.5)
+        has_defect = bool(rng.random() < 0.3)
+        defect: Literal["notch", "taper", "bulge", "camber"] | None = None
+        defect_size_mm = 0.0
+        if has_defect:
+            defect = rng.choice(["notch", "taper", "bulge", "camber"])
+            defect_size_mm = float(rng.uniform(6.0, 10.0))
+
+        billets.append(
+            BilletSpec(
+                center_mm=(0.0, center_y_mm),
+                angle_deg=angle_deg,
+                length_mm=length_mm,
+                width_mm=width_mm,
+                id_text=id_text,
+                qr=qr,
+                defect=defect,
+                defect_size_mm=defect_size_mm,
+            )
+        )
+    return billets
+
+
+def render_video(
+    rng: np.random.Generator,
+    mode: Literal["conveyor", "station"],
+    n_billets: int,
+    fps: int = 30,
+) -> Iterator[tuple[NDArray[np.uint8], list[GroundTruthBillet]]]:
+    """Render synthetic video frames and per-frame ground truth per SPEC §5.4.
+
+    - conveyor: billets enter from the left at 150 mm/s with 200 mm gaps, constant angle U(-5, 5).
+    - station: each billet appears, rests 1.5 s, disappears; 0.5 s empty between.
+    """
+    if mode == "station":
+        billets = _generate_video_billets(rng, mode, n_billets)
+        empty_spec = SceneSpec(billets=(), camera=CameraSpec(), effects=Effects(), with_marker=True)
+        empty_img, _ = render_scene(empty_spec, rng)
+        n_empty = max(1, int(round(0.5 * fps)))
+        n_rest = max(1, int(round(1.5 * fps)))
+
+        for _ in range(n_empty):
+            yield empty_img.copy(), []
+
+        for b in billets:
+            rest_b = BilletSpec(
+                center_mm=(360.0, b.center_mm[1]),
+                angle_deg=b.angle_deg,
+                length_mm=b.length_mm,
+                width_mm=b.width_mm,
+                id_text=b.id_text,
+                qr=b.qr,
+                defect=b.defect,
+                defect_size_mm=b.defect_size_mm,
+            )
+            spec = SceneSpec(billets=(rest_b,), camera=CameraSpec(), effects=Effects(), with_marker=True)
+            rest_img, gt = render_scene(spec, rng)
+            gt_billets = list(gt.billets)
+            for _ in range(n_rest):
+                yield rest_img.copy(), gt_billets
+
+            for _ in range(n_empty):
+                yield empty_img.copy(), []
+
+    elif mode == "conveyor":
+        billets = _generate_video_billets(rng, mode, n_billets)
+        speed_mm_s = 150.0
+        dt = 1.0 / float(fps)
+
+        # Initial x positions so billet 0 enters from bed left
+        # Bed starts at BED_X_MIN_MM (-100 mm)
+        # Leading edge of billet 0 starts at BED_X_MIN_MM
+        init_centers_x: list[float] = []
+        c0 = BED_X_MIN_MM - billets[0].length_mm / 2.0
+        init_centers_x.append(c0)
+        for i in range(1, n_billets):
+            prev_trailing = init_centers_x[i - 1] - billets[i - 1].length_mm / 2.0
+            ci = prev_trailing - 200.0 - billets[i].length_mm / 2.0
+            init_centers_x.append(ci)
+
+        frame_idx = 0
+        while True:
+            t = frame_idx * dt
+            # Check if all billets have exited past BED_X_MAX_MM
+            all_exited = True
+            current_billets: list[BilletSpec] = []
+            for i, b in enumerate(billets):
+                cx = init_centers_x[i] + speed_mm_s * t
+                if cx - b.length_mm / 2.0 <= BED_X_MAX_MM:
+                    all_exited = False
+                # If any part of the billet is in [BED_X_MIN_MM, BED_X_MAX_MM]:
+                if (cx + b.length_mm / 2.0 >= BED_X_MIN_MM) and (cx - b.length_mm / 2.0 <= BED_X_MAX_MM):
+                    current_billets.append(
+                        BilletSpec(
+                            center_mm=(cx, b.center_mm[1]),
+                            angle_deg=b.angle_deg,
+                            length_mm=b.length_mm,
+                            width_mm=b.width_mm,
+                            id_text=b.id_text,
+                            qr=b.qr,
+                            defect=b.defect,
+                            defect_size_mm=b.defect_size_mm,
+                        )
+                    )
+
+            if all_exited:
+                break
+
+            spec = SceneSpec(
+                billets=tuple(current_billets),
+                camera=CameraSpec(),
+                effects=Effects(),
+                with_marker=True,
+            )
+            frame_img, gt = render_scene(spec, rng)
+            yield frame_img, list(gt.billets)
+            frame_idx += 1
